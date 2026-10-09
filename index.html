@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Слова — тренажёр английского</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF1F8; --surface:#FFFFFF; --ink:#171C3A; --muted:#626a8c; --line:#D6DBEA;
+  --accent:#4B3FE4; --on-accent:#FFFFFF; --accent-soft:#E5E3FD;
+  --yes:#12936B; --yes-soft:#DCF3EA; --no:#D8433B; --no-soft:#FBE3E1; --mid:#F2B33D; --track:#DDE1EE;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#12152B; --surface:#1D2142; --ink:#ECEEFB; --muted:#9BA2C6; --line:#30355C;
+    --accent:#8F87FF; --on-accent:#12152B; --accent-soft:#2B2A5E;
+    --yes:#3CCB9C; --yes-soft:#173E38; --no:#FF7A72; --no-soft:#4A2330; --mid:#F2B33D; --track:#2A2F54;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12152B; --surface:#1D2142; --ink:#ECEEFB; --muted:#9BA2C6; --line:#30355C;
+  --accent:#8F87FF; --on-accent:#12152B; --accent-soft:#2B2A5E;
+  --yes:#3CCB9C; --yes-soft:#173E38; --no:#FF7A72; --no-soft:#4A2330; --mid:#F2B33D; --track:#2A2F54;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Onest",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  font-size:17px;line-height:1.45;-webkit-tap-highlight-color:transparent}
+#app{max-width:540px;margin:0 auto;padding:20px 18px 28px;min-height:100%;display:flex;flex-direction:column}
+h1{font-size:34px;line-height:1.1;font-weight:800;margin:8px 0 4px;letter-spacing:-.02em}
+h2{font-size:24px;line-height:1.2;font-weight:800;margin:0 0 6px;letter-spacing:-.01em;overflow-wrap:anywhere}
+p{margin:0 0 12px}
+.muted{color:var(--muted)}
+.small{font-size:14.5px}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:54px;padding:12px 18px;
+  border-radius:16px;font-weight:600;background:var(--accent);color:var(--on-accent)}
+.btn.ghost{background:var(--surface);color:var(--ink);border:1.5px solid var(--line)}
+.btn.danger{background:var(--no-soft);color:var(--no)}
+.btn:active{transform:scale(.985)}
+.btn[disabled]{opacity:.45}
+.stack{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+.spacer{flex:1}
+.back{display:inline-flex;align-items:center;min-height:44px;color:var(--accent);font-weight:600;margin-bottom:6px}
+
+/* progress bar: выучено / знакомо / новое */
+.bar{display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--track)}
+.bar i{display:block;height:100%}
+.bar .b2{background:var(--yes)} .bar .b1{background:var(--mid)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14.5px;color:var(--muted);margin-top:8px}
+.legend span::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--track)}
+.legend .l2::before{background:var(--yes)} .legend .l1::before{background:var(--mid)}
+
+/* наборы */
+.setcard{display:block;width:100%;text-align:left;background:var(--surface);border-radius:20px;padding:18px 18px 16px;border:1.5px solid transparent}
+.setcard:active{border-color:var(--accent)}
+.setcard b{display:block;font-size:19px;font-weight:600;overflow-wrap:anywhere}
+.setcard .small{display:block;margin:2px 0 12px}
+.panel{background:var(--surface);border-radius:20px;padding:18px}
+.field{display:block;font-weight:600;font-size:15px;margin:0 0 6px}
+input[type=text],textarea{width:100%;background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:14px;font-size:17px}
+textarea{min-height:230px;resize:vertical;line-height:1.5}
+input[type=text]:focus,textarea:focus{outline:none;border-color:var(--accent)}
+.seg{display:flex;background:var(--track);border-radius:14px;padding:4px;gap:4px}
+.seg button{flex:1;min-height:42px;border-radius:11px;font-size:15px;font-weight:600;color:var(--muted);padding:6px 4px}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--ink)}
+.words{list-style:none;margin:0;padding:0}
+.words li{display:flex;gap:10px;align-items:baseline;padding:11px 0;border-top:1px solid var(--line)}
+.words li:first-child{border-top:0}
+.words .dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--track);transform:translateY(-1px)}
+.words .s1{background:var(--mid)} .words .s2{background:var(--yes)}
+.words .t{font-weight:600;flex:1;overflow-wrap:anywhere}
+.words .d{flex:1;color:var(--muted);overflow-wrap:anywhere}
+
+/* заучивание */
+.top{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.top .x{width:44px;height:44px;border-radius:50%;background:var(--surface);font-size:22px;line-height:1;flex:none}
+.top .bar{flex:1}
+.count{font-size:14.5px;color:var(--muted);margin:0 0 14px 58px}
+.prompt{background:var(--surface);border-radius:26px;padding:26px 22px;min-height:170px;display:flex;flex-direction:column;justify-content:center;position:relative;margin-bottom:16px}
+.prompt .hint{font-size:14.5px;color:var(--muted);margin-bottom:8px}
+.prompt .word{font-size:clamp(28px,8.5vw,42px);line-height:1.12;font-weight:800;letter-spacing:-.02em;overflow-wrap:anywhere;padding-right:40px}
+.say{position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center}
+.say svg{width:22px;height:22px}
+.opt{display:block;width:100%;text-align:left;min-height:56px;padding:14px 16px;border-radius:16px;background:var(--surface);border:1.5px solid var(--line);font-weight:500;overflow-wrap:anywhere}
+.opt:active{border-color:var(--accent)}
+.opt.right{background:var(--yes-soft);border-color:var(--yes);color:var(--ink)}
+.opt.wrong{background:var(--no-soft);border-color:var(--no)}
+.opt[disabled]{cursor:default}
+.fb{border-radius:16px;padding:14px 16px;font-weight:600}
+.fb.right{background:var(--yes-soft);color:var(--yes)}
+.fb.wrong{background:var(--no-soft);color:var(--no)}
+.fb .ans{display:block;color:var(--ink);font-size:20px;margin-top:4px;overflow-wrap:anywhere}
+.fb s{font-weight:400;color:var(--muted)}
+.link{color:var(--accent);font-weight:600;min-height:44px;align-self:center;padding:0 10px}
+textarea.mini{min-height:110px;font-size:15px}
+.big{font-size:64px;line-height:1;margin:24px 0 10px}
+.pop{animation:pop .22s ease-out}
+@keyframes pop{from{transform:scale(.97);opacity:.6}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.pop{animation:none}.btn:active{transform:none}}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+(function(){
+"use strict";
+var LS_KEY="slova.v1";
+var app=document.getElementById("app");
+var state={v:1,updatedAt:0,sets:[],opts:{dir:"en-ru",types:"both",sound:true}};
+var ui={screen:"home",setId:null,editId:null,confirm:null,share:null,incoming:null};
+var framed=(function(){try{return window.self!==window.top;}catch(e){return true;}})();
+var session=null;
+
+/* ---------- хранение ---------- */
+try{var raw=localStorage.getItem(LS_KEY);if(raw){var p=JSON.parse(raw);if(p&&Array.isArray(p.sets))state=fix(p);}}catch(e){}
+function fix(s){s.opts=Object.assign({dir:"en-ru",types:"both",sound:true},s.opts||{});s.sets=s.sets||[];return s;}
+var remoteRef=null,writing=false,dirty=false,timer=null;
+function save(){
+  state.updatedAt=Date.now();
+  try{localStorage.setItem(LS_KEY,JSON.stringify(state));}catch(e){}
+  clearTimeout(timer);timer=setTimeout(flush,900);
+}
+function flush(){
+  if(!remoteRef)return;
+  if(writing){dirty=true;return;}
+  writing=true;dirty=false;
+  remoteRef.set(JSON.parse(JSON.stringify(state))).catch(function(){}).then(function(){
+    writing=false;if(dirty)flush();
+  });
+}
+(async function(){
+  if(!window.claude||typeof window.claude.use!=="function")return;
+  var db=await window.claude.use("db"),user=await window.claude.use("user");
+  if(!db||!user)return;
+  var uid=await user.id();if(!uid)return;
+  var ref=db.doc("data/users/"+uid+"/vocab");
+  var snap=await ref.get();
+  if(snap.exists){
+    var r=snap.data();
+    if(r&&Array.isArray(r.sets)&&(r.updatedAt||0)>(state.updatedAt||0)&&!session){
+      state=fix(JSON.parse(JSON.stringify(r)));
+      try{localStorage.setItem(LS_KEY,JSON.stringify(state));}catch(e){}
+      if(ui.screen!=="edit")render();
+    }
+  }
+  remoteRef=ref;
+  if(state.sets.length&&(!snap.exists||(snap.data().updatedAt||0)<state.updatedAt))flush();
+})().catch(function(){});
+
+/* ---------- утилиты ---------- */
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function shuffle(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}return a;}
+function getSet(id){return state.sets.find(function(s){return s.id===id;});}
+function counts(set){var c=[0,0,0];set.cards.forEach(function(x){c[x.s||0]++;});return c;}
+function plural(n,a,b,c){var m=n%100,k=n%10;if(m>10&&m<20)return c;if(k===1)return a;if(k>1&&k<5)return b;return c;}
+function wordsN(n){return n+" "+plural(n,"слово","слова","слов");}
+function barHTML(set){
+  var c=counts(set),n=set.cards.length||1;
+  return '<div class="bar" role="img" aria-label="Выучено '+c[2]+' из '+set.cards.length+'"><i class="b2" style="width:'+(c[2]/n*100)+'%"></i><i class="b1" style="width:'+(c[1]/n*100)+'%"></i></div>';
+}
+function parse(text){
+  var out=[];
+  text.split(/\r?\n/).forEach(function(line){
+    line=line.trim();if(!line)return;
+    var m=line.match(/^(.+?)\s*(?:\t|\s[-–—]\s|[;=])\s*(.+)$/);
+    if(m&&m[1].trim()&&m[2].trim())out.push({t:m[1].trim(),d:m[2].trim()});
+  });
+  return out;
+}
+function norm(s){
+  s=String(s).toLowerCase().replace(/ё/g,"е").replace(/\([^)]*\)/g," ").replace(/[^a-zа-я0-9\s'-]/gi," ").replace(/\s+/g," ").trim();
+  return s.replace(/^(to|a|an|the)\s+/,"");
+}
+function isRight(given,answer){
+  var g=norm(given);if(!g)return false;
+  var vars=[norm(answer)];
+  answer.split(/[,;\/]/).forEach(function(v){v=norm(v);if(v)vars.push(v);});
+  return vars.indexOf(g)!==-1;
+}
+function speak(text){
+  try{
+    if(!("speechSynthesis" in window))return;
+    window.speechSynthesis.cancel();
+    var u=new SpeechSynthesisUtterance(text.replace(/\([^)]*\)/g,""));
+    u.lang="en-US";u.rate=.92;window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+var SAMPLE=[["to borrow","брать взаймы"],["to lend","давать взаймы"],["reliable","надёжный"],["deadline","крайний срок"],["to postpone","откладывать"],["available","доступный"],["to remind","напоминать"],["improvement","улучшение"],["to afford","позволить себе"],["schedule","расписание"],["to suggest","предлагать"],["challenge","трудная задача"]];
+
+/* ---------- экраны ---------- */
+function render(){
+  var h="";
+  if(ui.screen==="home")h=homeHTML();
+  else if(ui.screen==="set")h=setHTML();
+  else if(ui.screen==="edit")h=editHTML();
+  else if(ui.screen==="learn")h=learnHTML();
+  else if(ui.screen==="round")h=roundHTML();
+  else if(ui.screen==="done")h=doneHTML();
+  else if(ui.screen==="import")h=importHTML();
+  app.innerHTML=h;
+  if(ui.screen==="edit")updateParsed();
+  if(ui.screen==="learn"&&session.q.type==="write"&&session.q.st==="ask"){var i=document.getElementById("ans");if(i)i.focus();}
+}
+function go(screen){ui.screen=screen;ui.confirm=null;ui.share=null;render();window.scrollTo(0,0);}
+
+function homeHTML(){
+  var h='<h1>Слова</h1>';
+  if(!state.sets.length){
+    return h+'<p class="muted">Добавьте список слов с переводом, и тренажёр проведёт вас через них раундами: сначала выбор из вариантов, потом ввод по памяти.</p>'+
+      '<div class="stack" style="margin-top:14px"><button class="btn" data-act="new">Создать набор</button>'+
+      '<button class="btn ghost" data-act="sample">Добавить набор для примера</button></div>';
+  }
+  h+='<p class="muted">Выберите набор, чтобы учить.</p><div class="stack" style="margin:8px 0 18px">';
+  state.sets.forEach(function(s){
+    var c=counts(s);
+    h+='<button class="setcard" data-act="open" data-id="'+s.id+'"><b>'+esc(s.name)+'</b><span class="small muted">'+wordsN(s.cards.length)+', выучено '+c[2]+'</span>'+barHTML(s)+'</button>';
+  });
+  return h+'</div><button class="btn ghost" data-act="new">Создать набор</button>';
+}
+
+function seg(name,val,items){
+  return '<div class="seg">'+items.map(function(it){return '<button data-act="opt" data-k="'+name+'" data-v="'+it[0]+'" aria-pressed="'+(val===it[0])+'">'+it[1]+'</button>';}).join("")+'</div>';
+}
+function setHTML(){
+  var s=getSet(ui.setId);if(!s){ui.screen="home";return homeHTML();}
+  var c=counts(s),left=c[0]+c[1];
+  var h='<button class="back" data-act="home">‹ Все наборы</button><h2>'+esc(s.name)+'</h2>'+
+    '<div style="margin:12px 0 4px">'+barHTML(s)+'<div class="legend"><span class="l2">Выучены: '+c[2]+'</span><span class="l1">Знакомые: '+c[1]+'</span><span>Новые: '+c[0]+'</span></div></div>'+
+    '<div class="stack" style="margin:18px 0">'+
+    (left?'<button class="btn" data-act="learn">'+(c[1]+c[2]?'Продолжить учить':'Учить')+'</button>':'<button class="btn" data-act="relearn">Учить заново</button>')+
+    '</div>'+
+    '<div class="panel stack" style="gap:14px"><div><span class="field">Что вижу в вопросе</span>'+seg("dir",state.opts.dir,[["en-ru","Английский"],["ru-en","Русский"]])+'</div>'+
+    '<div><span class="field">Как отвечаю</span>'+seg("types",state.opts.types,[["both","Выбор, потом ввод"],["choice","Выбор"],["write","Ввод"]])+'</div>'+
+    '<div><span class="field">Произношение вслух</span>'+seg("sound",state.opts.sound?"1":"0",[["1","Включено"],["0","Выключено"]])+'</div></div>'+
+    '<div class="panel" style="margin-top:14px"><ul class="words">'+s.cards.map(function(x){return '<li><i class="dot s'+(x.s||0)+'"></i><span class="t">'+esc(x.t)+'</span><span class="d">'+esc(x.d)+'</span></li>';}).join("")+'</ul></div>'+
+    '<div class="stack" style="margin-top:14px"><button class="btn ghost" data-act="share">Поделиться набором</button>'+shareHTML(s)+'<button class="btn ghost" data-act="edit">Изменить слова</button>'+
+    (c[1]+c[2]?'<button class="btn ghost" data-act="reset">'+(ui.confirm==="reset"?'Точно сбросить прогресс?':'Сбросить прогресс')+'</button>':'')+
+    '<button class="btn danger" data-act="del">'+(ui.confirm==="del"?'Точно удалить набор?':'Удалить набор')+'</button></div>';
+  return h;
+}
+
+/* ---------- обмен наборами ---------- */
+function enc(set){
+  var clean=function(x){return String(x).replace(/[\t\r\n]+/g," ");};
+  var txt=clean(set.name)+"\n"+set.cards.map(function(c){return clean(c.t)+"\t"+clean(c.d);}).join("\n");
+  var by=new TextEncoder().encode(txt),bin="";
+  for(var i=0;i<by.length;i++)bin+=String.fromCharCode(by[i]);
+  return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function dec(code){
+  try{
+    var b=code.replace(/-/g,"+").replace(/_/g,"/");while(b.length%4)b+="=";
+    var bin=atob(b),by=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++)by[i]=bin.charCodeAt(i);
+    var lines=new TextDecoder().decode(by).split("\n");
+    var name=(lines.shift()||"").trim().slice(0,60)||"Набор";
+    var cards=[];
+    lines.slice(0,2000).forEach(function(l){var p=l.split("\t");if(p.length>=2&&p[0].trim()&&p[1].trim())cards.push({t:p[0].trim(),d:p[1].trim()});});
+    return cards.length?{name:name,cards:cards}:null;
+  }catch(e){return null;}
+}
+function readHash(){
+  var m=location.hash.match(/^#s=([A-Za-z0-9_-]+)/);if(!m)return false;
+  var inc=dec(m[1]);if(!inc)return false;
+  ui.incoming=inc;ui.screen="import";return true;
+}
+function clearHash(){try{history.replaceState(null,"",location.pathname+location.search);}catch(e){}}
+function shareHTML(s){
+  if(!ui.share)return "";
+  if(framed){
+    return '<div class="panel stack"><label class="field" for="sh" style="margin:0">Слова набора</label><textarea id="sh" class="mini" readonly>'+esc(s.cards.map(function(x){return x.t+" - "+x.d;}).join("\n"))+'</textarea>'+
+      '<button class="btn" data-act="copy">Скопировать слова</button><p class="small muted" style="margin:0">Ссылки на наборы работают в версии на отдельном сайте. Здесь можно скопировать слова: получатель вставит их в новый набор.</p></div>';
+  }
+  var url=location.origin+location.pathname+location.search+"#s="+enc(s);
+  return '<div class="panel stack"><label class="field" for="sh" style="margin:0">Ссылка на набор</label><input id="sh" type="text" readonly value="'+esc(url)+'">'+
+    '<button class="btn" data-act="copy">Скопировать ссылку</button><p class="small muted" style="margin:0">Тот, кто откроет ссылку, сможет добавить набор себе. Прогресс не передаётся.</p></div>';
+}
+function importHTML(){
+  var inc=ui.incoming;
+  return '<h2 style="margin-top:18px">Вам прислали набор</h2><p class="muted">'+esc(inc.name)+', '+wordsN(inc.cards.length)+'.</p>'+
+    '<div class="stack" style="margin:8px 0 16px"><button class="btn" data-act="imp-add">Добавить к моим наборам</button><button class="btn ghost" data-act="imp-no">Не добавлять</button></div>'+
+    '<div class="panel"><ul class="words">'+inc.cards.map(function(x){return '<li><span class="t">'+esc(x.t)+'</span><span class="d">'+esc(x.d)+'</span></li>';}).join("")+'</ul></div>';
+}
+function copyShare(btn){
+  var el=document.getElementById("sh");if(!el)return;
+  var v=el.value,done=function(){btn.textContent="Скопировано";};
+  var manual=function(){try{el.focus();el.select();el.setSelectionRange(0,v.length);if(document.execCommand("copy"))done();}catch(e){}};
+  try{navigator.clipboard.writeText(v).then(done,manual);}catch(e){manual();}
+}
+function addIncoming(){
+  var inc=ui.incoming;if(!inc)return;
+  var same=state.sets.find(function(s){
+    return s.name===inc.name&&s.cards.length===inc.cards.length&&s.cards.every(function(c,i){return c.t===inc.cards[i].t&&c.d===inc.cards[i].d;});
+  });
+  if(same)ui.setId=same.id;
+  else{
+    var s={id:uid(),name:inc.name,cards:inc.cards.map(function(c){return{id:uid(),t:c.t,d:c.d,s:0};})};
+    state.sets.push(s);ui.setId=s.id;save();
+  }
+  ui.incoming=null;clearHash();go("set");
+}
+
+function editHTML(){
+  var s=ui.editId?getSet(ui.editId):null;
+  var text=s?s.cards.map(function(x){return x.t+" - "+x.d;}).join("\n"):"";
+  return '<button class="back" data-act="cancel">‹ Отмена</button><h2>'+(s?'Изменить набор':'Новый набор')+'</h2>'+
+    '<div class="stack" style="margin-top:10px;gap:16px"><div><label class="field" for="nm">Название</label><input id="nm" type="text" maxlength="60" placeholder="Например, Travel" value="'+esc(s?s.name:"")+'"></div>'+
+    '<div><label class="field" for="tx">Слова</label><textarea id="tx" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="apple - яблоко&#10;to borrow - брать взаймы&#10;deadline - крайний срок">'+esc(text)+'</textarea>'+
+    '<p class="small muted" style="margin:8px 0 0">Каждая пара с новой строки: слово, дефис с пробелами, перевод. Можно вставить список из Excel или Quizlet, табуляция тоже подойдёт. <span id="pc"></span></p></div>'+
+    '<button class="btn" data-act="save" id="sv">Сохранить набор</button></div>';
+}
+function updateParsed(){
+  var tx=document.getElementById("tx"),pc=document.getElementById("pc"),sv=document.getElementById("sv");
+  if(!tx)return;var n=parse(tx.value).length;
+  pc.textContent="Распознано: "+wordsN(n)+".";sv.disabled=n===0;
+}
+
+/* ---------- заучивание ---------- */
+function startLearn(){session={setId:ui.setId,round:0,t:null};nextRound();}
+function nextRound(){
+  var set=getSet(session.setId);
+  var pend=set.cards.filter(function(c){return (c.s||0)<2;});
+  if(!pend.length){go("done");return;}
+  var pick=shuffle(pend.filter(function(c){return c.s===1;})).concat(shuffle(pend.filter(function(c){return !c.s;}))).slice(0,7);
+  session.queue=shuffle(pick).map(function(c){return c.id;});
+  session.total=pick.length;session.ok=0;session.missed=[];session.round++;
+  ui.screen="learn";askNext();
+}
+function askNext(){
+  clearTimeout(session.t);
+  if(!session.queue.length){go("round");return;}
+  var set=getSet(session.setId),id=session.queue.shift();
+  var card=set.cards.find(function(c){return c.id===id;});
+  if(!card){askNext();return;}
+  var en=state.opts.dir==="en-ru";
+  var q={card:card,prompt:en?card.t:card.d,answer:en?card.d:card.t,st:"ask",given:"",chosen:null};
+  q.type=state.opts.types==="both"?(card.s?"write":"choice"):state.opts.types;
+  if(q.type==="choice"){
+    var seen={};seen[norm(q.answer)]=1;var ds=[];
+    shuffle(set.cards).forEach(function(c){var a=en?c.d:c.t,k=norm(a);if(!seen[k]&&ds.length<3){seen[k]=1;ds.push(a);}});
+    if(ds.length)q.options=shuffle(ds.concat([q.answer]));else q.type="write";
+  }
+  session.q=q;ui.screen="learn";render();
+  if(en&&state.opts.sound)speak(card.t);
+}
+function answer(ok,given){
+  var q=session.q;if(q.st!=="ask")return;
+  q.given=given;q.st=ok?"right":"wrong";
+  if(ok){q.card.s=Math.min(2,(q.card.s||0)+1);session.ok++;}
+  else{
+    if(session.missed.indexOf(q.card.id)===-1)session.missed.push(q.card.id);
+    session.queue.splice(Math.min(session.queue.length,2),0,q.card.id);
+  }
+  save();render();
+  if(state.opts.dir==="ru-en"&&state.opts.sound)speak(q.card.t);
+  if(ok)session.t=setTimeout(askNext,state.opts.dir==="ru-en"&&state.opts.sound?1400:850);
+}
+function override(){
+  var q=session.q;if(q.st!=="wrong")return;
+  var i=session.queue.indexOf(q.card.id);if(i!==-1)session.queue.splice(i,1);
+  var m=session.missed.indexOf(q.card.id);if(m!==-1)session.missed.splice(m,1);
+  q.card.s=Math.min(2,(q.card.s||0)+1);session.ok++;save();askNext();
+}
+var SPK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+function learnHTML(){
+  var q=session.q,set=getSet(session.setId),c=counts(set),en=state.opts.dir==="en-ru";
+  var showSay=en||q.st!=="ask";
+  var h='<div class="top"><button class="x" data-act="quit" aria-label="Закрыть">×</button><div class="bar" role="img" aria-label="Раунд: '+session.ok+' из '+session.total+'"><i class="b2" style="width:'+(session.ok/session.total*100)+'%"></i></div></div>'+
+    '<p class="count">Раунд '+session.round+'. Выучено '+c[2]+' из '+set.cards.length+'</p>'+
+    '<div class="prompt pop"><span class="hint">'+(q.type==="choice"?"Выберите перевод":(en?"Напишите перевод":"Напишите по-английски"))+'</span><span class="word">'+esc(q.prompt)+'</span>'+
+    (showSay?'<button class="say" data-act="say" aria-label="Произнести">'+SPK+'</button>':'')+'</div>';
+  if(q.type==="choice"){
+    h+='<div class="stack">'+q.options.map(function(o,i){
+      var cls="";
+      if(q.st!=="ask"){if(o===q.answer)cls=" right";else if(i===q.chosen)cls=" wrong";}
+      return '<button class="opt'+cls+'" data-act="pick" data-i="'+i+'"'+(q.st!=="ask"?" disabled":"")+'>'+esc(o)+'</button>';
+    }).join("")+'</div>';
+    if(q.st==="wrong")h+='<div class="stack" style="margin-top:14px"><button class="btn" data-act="next">Дальше</button></div>';
+  }else if(q.st==="ask"){
+    h+='<div class="stack"><input id="ans" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" placeholder="Ваш ответ">'+
+      '<button class="btn" data-act="check">Ответить</button><button class="link" data-act="skip">Не знаю</button></div>';
+  }else if(q.st==="right"){
+    h+='<div class="fb right pop">Верно<span class="ans">'+esc(q.answer)+'</span></div>';
+  }else{
+    h+='<div class="stack"><div class="fb wrong pop">'+(q.given?'Ваш ответ: <s>'+esc(q.given)+'</s><br>':'')+'Правильно<span class="ans">'+esc(q.answer)+'</span></div>'+
+      '<button class="btn" data-act="next">Дальше</button>'+(q.given?'<button class="link" data-act="override">Засчитать как верный</button>':'')+'</div>';
+  }
+  return h;
+}
+function roundHTML(){
+  var set=getSet(session.setId),c=counts(set),left=c[0]+c[1];
+  var missed=set.cards.filter(function(x){return session.missed.indexOf(x.id)!==-1;});
+  var h='<h2 style="margin-top:18px">Раунд '+session.round+' пройден</h2><p class="muted">'+(left?'Осталось выучить: '+wordsN(left)+'.':'Все слова набора выучены.')+'</p>'+
+    '<div style="margin:10px 0 18px">'+barHTML(set)+'<div class="legend"><span class="l2">Выучены: '+c[2]+'</span><span class="l1">Знакомые: '+c[1]+'</span><span>Новые: '+c[0]+'</span></div></div>';
+  if(missed.length)h+='<div class="panel" style="margin-bottom:18px"><span class="field">Стоит повторить</span><ul class="words">'+missed.map(function(x){return '<li><i class="dot s'+(x.s||0)+'"></i><span class="t">'+esc(x.t)+'</span><span class="d">'+esc(x.d)+'</span></li>';}).join("")+'</ul></div>';
+  h+='<div class="stack"><button class="btn" data-act="'+(left?'cont':'finish')+'">'+(left?'Следующий раунд':'Завершить')+'</button>'+(left?'<button class="btn ghost" data-act="quit">Закончить на сегодня</button>':'')+'</div>';
+  return h;
+}
+function doneHTML(){
+  var set=getSet(ui.setId);
+  return '<div class="big" aria-hidden="true">🎉</div><h2>Набор выучен</h2><p class="muted">'+esc(set.name)+': '+wordsN(set.cards.length)+' пройдено и выбором, и вводом по памяти.</p>'+
+    '<div class="stack" style="margin-top:14px"><button class="btn" data-act="relearn">Учить заново</button><button class="btn ghost" data-act="toset">К набору</button></div>';
+}
+
+/* ---------- события ---------- */
+app.addEventListener("click",function(e){
+  var b=e.target.closest("[data-act]");if(!b)return;
+  var a=b.dataset.act,set=getSet(ui.setId);
+  if(a!=="reset"&&a!=="del")ui.confirm=null;
+  switch(a){
+    case "home":go("home");break;
+    case "new":ui.editId=null;go("edit");break;
+    case "sample":
+      state.sets.push({id:uid(),name:"Пример: полезные слова",cards:SAMPLE.map(function(x){return{id:uid(),t:x[0],d:x[1],s:0};})});
+      save();render();break;
+    case "open":ui.setId=b.dataset.id;go("set");break;
+    case "edit":ui.editId=ui.setId;go("edit");break;
+    case "cancel":go(ui.editId?"set":"home");break;
+    case "save":saveSet();break;
+    case "opt":
+      var k=b.dataset.k,v=b.dataset.v;state.opts[k]=k==="sound"?v==="1":v;save();render();break;
+    case "reset":
+      if(ui.confirm!=="reset"){ui.confirm="reset";render();break;}
+      set.cards.forEach(function(c){c.s=0;});ui.confirm=null;save();render();break;
+    case "del":
+      if(ui.confirm!=="del"){ui.confirm="del";render();break;}
+      state.sets=state.sets.filter(function(s){return s.id!==ui.setId;});save();go("home");break;
+    case "learn":startLearn();break;
+    case "relearn":set.cards.forEach(function(c){c.s=0;});save();startLearn();break;
+    case "pick":var i=+b.dataset.i;session.q.chosen=i;answer(session.q.options[i]===session.q.answer,"");break;
+    case "check":check();break;
+    case "skip":answer(false,"");break;
+    case "next":askNext();break;
+    case "override":override();break;
+    case "say":speak(session.q.card.t);break;
+    case "cont":nextRound();break;
+    case "finish":session=null;go("done");break;
+    case "quit":clearTimeout(session.t);session=null;go("set");break;
+    case "toset":go("set");break;
+    case "share":ui.share=!ui.share;render();break;
+    case "copy":copyShare(b);break;
+    case "imp-add":addIncoming();break;
+    case "imp-no":ui.incoming=null;clearHash();go("home");break;
+  }
+});
+app.addEventListener("input",function(e){if(e.target.id==="tx")updateParsed();});
+app.addEventListener("keydown",function(e){
+  if(e.key==="Enter"&&e.target.id==="ans"){e.preventDefault();check();}
+});
+function check(){
+  var i=document.getElementById("ans");if(!i)return;
+  var v=i.value.trim();if(!v){i.focus();return;}
+  answer(isRight(v,session.q.answer),v);
+}
+function saveSet(){
+  var name=document.getElementById("nm").value.trim(),pairs=parse(document.getElementById("tx").value);
+  if(!pairs.length)return;
+  if(!name)name="Набор "+(state.sets.length+(ui.editId?0:1));
+  var old=ui.editId?getSet(ui.editId):null,prev={};
+  if(old)old.cards.forEach(function(c){prev[c.t+"|"+c.d]=c;});
+  var cards=pairs.map(function(p){var o=prev[p.t+"|"+p.d];return{id:o?o.id:uid(),t:p.t,d:p.d,s:o?(o.s||0):0};});
+  if(old){old.name=name;old.cards=cards;}
+  else{var s={id:uid(),name:name,cards:cards};state.sets.push(s);ui.setId=s.id;}
+  save();go("set");
+}
+readHash();
+render();
+window.addEventListener("hashchange",function(){if(!session&&readHash()){render();window.scrollTo(0,0);}});
+})();
+</script>
+</body>
+</html>
