@@ -102,12 +102,20 @@ input[type=text]:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .fb .ans{display:block;color:var(--ink);font-size:20px;margin-top:4px;overflow-wrap:anywhere}
 .fb s{font-weight:400;color:var(--muted)}
 .link{color:var(--accent);font-weight:600;min-height:44px;align-self:center;padding:0 10px}
+math{font-family:"STIX Two Math","Cambria Math","Latin Modern Math","Noto Sans Math",math;font-size:1.08em}
+.fx{display:inline-block;max-width:100%;overflow-x:auto;overflow-y:hidden;vertical-align:middle;padding:3px 0}
+.words .t,.words .d{min-width:0}
+.words li.fl{flex-wrap:wrap;gap:4px 10px}
+.words li.fl .t{flex:1 1 calc(100% - 24px)}
+.words li.fl .d{flex:1 1 100%;color:var(--ink)}
+.pv{margin-top:12px}
 textarea.mini{min-height:110px;font-size:15px}
 .big{font-size:64px;line-height:1;margin:24px 0 10px}
 .pop{animation:pop .22s ease-out}
 @keyframes pop{from{transform:scale(.97);opacity:.6}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.pop{animation:none}.btn:active{transform:none}}
 </style>
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js" onload="window.__kx&&window.__kx()"></script>
 </head>
 <body>
 <main id="app"></main>
@@ -117,7 +125,7 @@ textarea.mini{min-height:110px;font-size:15px}
 var LS_KEY="slova.v1";
 var app=document.getElementById("app");
 var state={v:1,updatedAt:0,sets:[],opts:{dir:"en-ru",types:"both",sound:true}};
-var ui={screen:"home",setId:null,editId:null,confirm:null,share:null,incoming:null};
+var ui={screen:"home",setId:null,editId:null,confirm:null,share:null,incoming:null,draft:{name:"",text:"",kind:"words"}};
 var framed=(function(){try{return window.self!==window.top;}catch(e){return true;}})();
 var session=null;
 
@@ -159,21 +167,43 @@ function flush(){
 
 /* ---------- утилиты ---------- */
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function isF(set){return !!set&&set.kind==="formulas";}
+function tex(s){
+  if(!window.katex)return esc(s);
+  try{return '<span class="fx">'+window.katex.renderToString("\\displaystyle "+s,{output:"mathml",throwOnError:false,strict:"ignore"}).replace(/(<mi[^>]*>[a-z]+<\/mi>)?<mo>\u2061<\/mo>/g,function(m,fn){return (fn?'<mspace width="0.17em"></mspace>'+fn:'')+'<mo>\u2061</mo><mspace width="0.17em"></mspace>';})+'</span>';}catch(e){return esc(s);}
+}
+var DELIM=/\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$([^$]+?)\$/g;
+function rich(s,allMath){
+  s=String(s);DELIM.lastIndex=0;
+  if(!DELIM.test(s))return allMath?tex(s):esc(s);
+  DELIM.lastIndex=0;var out="",last=0,m;
+  while((m=DELIM.exec(s))){out+=esc(s.slice(last,m.index))+tex(m[1]||m[2]||m[3]||m[4]);last=m.index+m[0].length;}
+  return out+esc(s.slice(last));
+}
+function li(set,x,dot){
+  var f=isF(set);
+  return '<li'+(f?' class="fl"':'')+'>'+(dot?'<i class="dot s'+(x.s||0)+'"></i>':'')+'<span class="t">'+(f?rich(x.t,false):esc(x.t))+'</span><span class="d">'+(f?rich(x.d,true):esc(x.d))+'</span></li>';
+}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 function shuffle(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}return a;}
 function getSet(id){return state.sets.find(function(s){return s.id===id;});}
 function counts(set){var c=[0,0,0];set.cards.forEach(function(x){c[x.s||0]++;});return c;}
 function plural(n,a,b,c){var m=n%100,k=n%10;if(m>10&&m<20)return c;if(k===1)return a;if(k>1&&k<5)return b;return c;}
 function wordsN(n){return n+" "+plural(n,"слово","слова","слов");}
+function cnt(set,n){return isF(set)?n+" "+plural(n,"формула","формулы","формул"):wordsN(n);}
+function itemsN(set){return cnt(set,set.cards.length);}
 function barHTML(set){
   var c=counts(set),n=set.cards.length||1;
   return '<div class="bar" role="img" aria-label="Выучено '+c[2]+' из '+set.cards.length+'"><i class="b2" style="width:'+(c[2]/n*100)+'%"></i><i class="b1" style="width:'+(c[1]/n*100)+'%"></i></div>';
 }
-function parse(text){
-  var out=[];
+function parse(text,kind){
+  var out=[],f=kind==="formulas";
+  var re=f?/^(.+?)\s*(?:\t|\s[-–—]\s|:\s)\s*(.+)$/:/^(.+?)\s*(?:\t|\s[-–—]\s|[;=])\s*(.+)$/;
   text.split(/\r?\n/).forEach(function(line){
-    line=line.trim();if(!line)return;
-    var m=line.match(/^(.+?)\s*(?:\t|\s[-–—]\s|[;=])\s*(.+)$/);
+    line=line.trim();
+    if(f)line=line.replace(/^(?:[-*•]\s+|\d+[.)]\s+)/,"").replace(/\*\*/g,"").trim();
+    if(!line)return;
+    var m=line.match(re);
     if(m&&m[1].trim()&&m[2].trim())out.push({t:m[1].trim(),d:m[2].trim()});
   });
   return out;
@@ -217,14 +247,14 @@ function go(screen){ui.screen=screen;ui.confirm=null;ui.share=null;render();wind
 function homeHTML(){
   var h='<h1>Слова</h1>';
   if(!state.sets.length){
-    return h+'<p class="muted">Добавьте список слов с переводом, и тренажёр проведёт вас через них раундами: сначала выбор из вариантов, потом ввод по памяти.</p>'+
+    return h+'<p class="muted">Добавьте слова с переводом или формулы с названиями, и тренажёр проведёт вас через них раундами. Слова: сначала выбор из вариантов, потом ввод по памяти. Формулы: выбор правильной из нескольких.</p>'+
       '<div class="stack" style="margin-top:14px"><button class="btn" data-act="new">Создать набор</button>'+
       '<button class="btn ghost" data-act="sample">Добавить набор для примера</button></div>';
   }
   h+='<p class="muted">Выберите набор, чтобы учить.</p><div class="stack" style="margin:8px 0 18px">';
   state.sets.forEach(function(s){
     var c=counts(s);
-    h+='<button class="setcard" data-act="open" data-id="'+s.id+'"><b>'+esc(s.name)+'</b><span class="small muted">'+wordsN(s.cards.length)+', выучено '+c[2]+'</span>'+barHTML(s)+'</button>';
+    h+='<button class="setcard" data-act="open" data-id="'+s.id+'"><b>'+esc(s.name)+'</b><span class="small muted">'+itemsN(s)+', выучено '+c[2]+'</span>'+barHTML(s)+'</button>';
   });
   return h+'</div><button class="btn ghost" data-act="new">Создать набор</button>';
 }
@@ -240,11 +270,12 @@ function setHTML(){
     '<div class="stack" style="margin:18px 0">'+
     (left?'<button class="btn" data-act="learn">'+(c[1]+c[2]?'Продолжить учить':'Учить')+'</button>':'<button class="btn" data-act="relearn">Учить заново</button>')+
     '</div>'+
+    (isF(s)?'<div class="panel stack" style="gap:14px"><div><span class="field">Что вижу в вопросе</span>'+seg("fdir",state.opts.fdir||"en-ru",[["en-ru","Название"],["ru-en","Формулу"]])+'</div></div>':
     '<div class="panel stack" style="gap:14px"><div><span class="field">Что вижу в вопросе</span>'+seg("dir",state.opts.dir,[["en-ru","Английский"],["ru-en","Русский"]])+'</div>'+
     '<div><span class="field">Как отвечаю</span>'+seg("types",state.opts.types,[["both","Выбор, потом ввод"],["choice","Выбор"],["write","Ввод"]])+'</div>'+
-    '<div><span class="field">Произношение вслух</span>'+seg("sound",state.opts.sound?"1":"0",[["1","Включено"],["0","Выключено"]])+'</div></div>'+
-    '<div class="panel" style="margin-top:14px"><ul class="words">'+s.cards.map(function(x){return '<li><i class="dot s'+(x.s||0)+'"></i><span class="t">'+esc(x.t)+'</span><span class="d">'+esc(x.d)+'</span></li>';}).join("")+'</ul></div>'+
-    '<div class="stack" style="margin-top:14px"><button class="btn ghost" data-act="share">Поделиться набором</button>'+shareHTML(s)+'<button class="btn ghost" data-act="edit">Изменить слова</button>'+
+    '<div><span class="field">Произношение вслух</span>'+seg("sound",state.opts.sound?"1":"0",[["1","Включено"],["0","Выключено"]])+'</div></div>')+
+    '<div class="panel" style="margin-top:14px"><ul class="words">'+s.cards.map(function(x){return li(s,x,true);}).join("")+'</ul></div>'+
+    '<div class="stack" style="margin-top:14px"><button class="btn ghost" data-act="share">Поделиться набором</button>'+shareHTML(s)+'<button class="btn ghost" data-act="edit">Изменить набор</button>'+
     (c[1]+c[2]?'<button class="btn ghost" data-act="reset">'+(ui.confirm==="reset"?'Точно сбросить прогресс?':'Сбросить прогресс')+'</button>':'')+
     '<button class="btn danger" data-act="del">'+(ui.confirm==="del"?'Точно удалить набор?':'Удалить набор')+'</button></div>';
   return h;
@@ -253,7 +284,7 @@ function setHTML(){
 /* ---------- обмен наборами ---------- */
 function enc(set){
   var clean=function(x){return String(x).replace(/[\t\r\n]+/g," ");};
-  var txt=clean(set.name)+"\n"+set.cards.map(function(c){return clean(c.t)+"\t"+clean(c.d);}).join("\n");
+  var txt=clean(set.name)+(isF(set)?"\tf":"")+"\n"+set.cards.map(function(c){return clean(c.t)+"\t"+clean(c.d);}).join("\n");
   var by=new TextEncoder().encode(txt),bin="";
   for(var i=0;i<by.length;i++)bin+=String.fromCharCode(by[i]);
   return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
@@ -264,10 +295,10 @@ function dec(code){
     var bin=atob(b),by=new Uint8Array(bin.length);
     for(var i=0;i<bin.length;i++)by[i]=bin.charCodeAt(i);
     var lines=new TextDecoder().decode(by).split("\n");
-    var name=(lines.shift()||"").trim().slice(0,60)||"Набор";
+    var head=(lines.shift()||"").split("\t"),name=head[0].trim().slice(0,60)||"Набор",kind=head[1]==="f"?"formulas":"words";
     var cards=[];
     lines.slice(0,2000).forEach(function(l){var p=l.split("\t");if(p.length>=2&&p[0].trim()&&p[1].trim())cards.push({t:p[0].trim(),d:p[1].trim()});});
-    return cards.length?{name:name,cards:cards}:null;
+    return cards.length?{name:name,kind:kind,cards:cards}:null;
   }catch(e){return null;}
 }
 function readHash(){
@@ -288,9 +319,9 @@ function shareHTML(s){
 }
 function importHTML(){
   var inc=ui.incoming;
-  return '<h2 style="margin-top:18px">Вам прислали набор</h2><p class="muted">'+esc(inc.name)+', '+wordsN(inc.cards.length)+'.</p>'+
+  return '<h2 style="margin-top:18px">Вам прислали набор</h2><p class="muted">'+esc(inc.name)+', '+itemsN(inc)+'.</p>'+
     '<div class="stack" style="margin:8px 0 16px"><button class="btn" data-act="imp-add">Добавить к моим наборам</button><button class="btn ghost" data-act="imp-no">Не добавлять</button></div>'+
-    '<div class="panel"><ul class="words">'+inc.cards.map(function(x){return '<li><span class="t">'+esc(x.t)+'</span><span class="d">'+esc(x.d)+'</span></li>';}).join("")+'</ul></div>';
+    '<div class="panel"><ul class="words">'+inc.cards.map(function(x){return li(inc,x,false);}).join("")+'</ul></div>';
 }
 function copyShare(btn){
   var el=document.getElementById("sh");if(!el)return;
@@ -301,29 +332,37 @@ function copyShare(btn){
 function addIncoming(){
   var inc=ui.incoming;if(!inc)return;
   var same=state.sets.find(function(s){
-    return s.name===inc.name&&s.cards.length===inc.cards.length&&s.cards.every(function(c,i){return c.t===inc.cards[i].t&&c.d===inc.cards[i].d;});
+    return s.name===inc.name&&(s.kind||"words")===inc.kind&&s.cards.length===inc.cards.length&&s.cards.every(function(c,i){return c.t===inc.cards[i].t&&c.d===inc.cards[i].d;});
   });
   if(same)ui.setId=same.id;
   else{
-    var s={id:uid(),name:inc.name,cards:inc.cards.map(function(c){return{id:uid(),t:c.t,d:c.d,s:0};})};
+    var s={id:uid(),name:inc.name,kind:inc.kind,cards:inc.cards.map(function(c){return{id:uid(),t:c.t,d:c.d,s:0};})};
     state.sets.push(s);ui.setId=s.id;save();
   }
   ui.incoming=null;clearHash();go("set");
 }
 
+var F_SAMPLE=["Площадь трапеции - S = \\frac{a+b}{2} \\cdot h","Площадь треугольника - S = \\frac{1}{2} a h","Формула Герона - S = \\sqrt{p(p-a)(p-b)(p-c)}","Площадь круга - S = \\pi r^2","Длина окружности - C = 2\\pi r","Теорема косинусов - c^2 = a^2 + b^2 - 2ab\\cos\\gamma","Теорема синусов - \\frac{a}{\\sin\\alpha} = \\frac{b}{\\sin\\beta} = \\frac{c}{\\sin\\gamma} = 2R","Основное тригонометрическое тождество - \\sin^2\\alpha + \\cos^2\\alpha = 1","Синус двойного угла - \\sin 2\\alpha = 2\\sin\\alpha\\cos\\alpha","Косинус двойного угла - \\cos 2\\alpha = \\cos^2\\alpha - \\sin^2\\alpha"].join("\n");
+function grabDraft(){var n=document.getElementById("nm"),t=document.getElementById("tx");if(n)ui.draft.name=n.value;if(t)ui.draft.text=t.value;}
 function editHTML(){
-  var s=ui.editId?getSet(ui.editId):null;
-  var text=s?s.cards.map(function(x){return x.t+" - "+x.d;}).join("\n"):"";
-  return '<button class="back" data-act="cancel">‹ Отмена</button><h2>'+(s?'Изменить набор':'Новый набор')+'</h2>'+
-    '<div class="stack" style="margin-top:10px;gap:16px"><div><label class="field" for="nm">Название</label><input id="nm" type="text" maxlength="60" placeholder="Например, Travel" value="'+esc(s?s.name:"")+'"></div>'+
-    '<div><label class="field" for="tx">Слова</label><textarea id="tx" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="apple - яблоко&#10;to borrow - брать взаймы&#10;deadline - крайний срок">'+esc(text)+'</textarea>'+
-    '<p class="small muted" style="margin:8px 0 0">Каждая пара с новой строки: слово, дефис с пробелами, перевод. Можно вставить список из Excel или Quizlet, табуляция тоже подойдёт. <span id="pc"></span></p></div>'+
+  var d=ui.draft,f=d.kind==="formulas";
+  return '<button class="back" data-act="cancel">‹ Отмена</button><h2>'+(ui.editId?'Изменить набор':'Новый набор')+'</h2>'+
+    '<div class="stack" style="margin-top:10px;gap:16px"><div><span class="field">Что учим</span><div class="seg">'+
+    [["words","Слова"],["formulas","Формулы"]].map(function(it){return '<button data-act="kind" data-v="'+it[0]+'" aria-pressed="'+(d.kind===it[0])+'">'+it[1]+'</button>';}).join("")+'</div></div>'+
+    '<div><label class="field" for="nm">Название</label><input id="nm" type="text" maxlength="60" placeholder="'+(f?'Например, Планиметрия':'Например, Travel')+'" value="'+esc(d.name)+'"></div>'+
+    '<div><label class="field" for="tx">'+(f?'Формулы':'Слова')+'</label><textarea id="tx" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="'+
+    (f?'Площадь трапеции - S = \\frac{a+b}{2} h&#10;Площадь круга - S = \\pi r^2':'apple - яблоко&#10;to borrow - брать взаймы&#10;deadline - крайний срок')+'">'+esc(d.text)+'</textarea>'+
+    '<p class="small muted" style="margin:8px 0 0">'+
+    (f?'Каждая формула с новой строки: название, дефис с пробелами, формула в записи LaTeX. Знаки $ вокруг формулы можно оставить.':'Каждая пара с новой строки: слово, дефис с пробелами, перевод. Можно вставить список из Excel или Quizlet, табуляция тоже подойдёт.')+
+    ' <span id="pc"></span></p>'+
+    (f?'<button class="link" data-act="fsample" style="display:block;padding:0">Вставить пример</button><div class="panel pv" id="pv" hidden></div>':'')+'</div>'+
     '<button class="btn" data-act="save" id="sv">Сохранить набор</button></div>';
 }
 function updateParsed(){
-  var tx=document.getElementById("tx"),pc=document.getElementById("pc"),sv=document.getElementById("sv");
-  if(!tx)return;var n=parse(tx.value).length;
-  pc.textContent="Распознано: "+wordsN(n)+".";sv.disabled=n===0;
+  var tx=document.getElementById("tx"),pc=document.getElementById("pc"),sv=document.getElementById("sv"),pv=document.getElementById("pv");
+  if(!tx)return;var k={kind:ui.draft.kind},ps=parse(tx.value,k.kind),n=ps.length;
+  pc.textContent="Распознано: "+cnt(k,n)+".";sv.disabled=n===0;
+  if(pv){pv.hidden=!n;pv.innerHTML='<span class="field">Как это будет выглядеть</span><ul class="words">'+ps.slice(0,40).map(function(x){return li(k,x,false);}).join("")+'</ul>';}
 }
 
 /* ---------- заучивание ---------- */
@@ -343,16 +382,17 @@ function askNext(){
   var set=getSet(session.setId),id=session.queue.shift();
   var card=set.cards.find(function(c){return c.id===id;});
   if(!card){askNext();return;}
-  var en=state.opts.dir==="en-ru";
-  var q={card:card,prompt:en?card.t:card.d,answer:en?card.d:card.t,st:"ask",given:"",chosen:null};
-  q.type=state.opts.types==="both"?(card.s?"write":"choice"):state.opts.types;
+  var f=isF(set),en=(f?(state.opts.fdir||"en-ru"):state.opts.dir)==="en-ru";
+  var q={card:card,f:f,en:en,prompt:en?card.t:card.d,answer:en?card.d:card.t,st:"ask",given:"",chosen:null};
+  q.type=f?"choice":(state.opts.types==="both"?(card.s?"write":"choice"):state.opts.types);
   if(q.type==="choice"){
-    var seen={};seen[norm(q.answer)]=1;var ds=[];
-    shuffle(set.cards).forEach(function(c){var a=en?c.d:c.t,k=norm(a);if(!seen[k]&&ds.length<3){seen[k]=1;ds.push(a);}});
-    if(ds.length)q.options=shuffle(ds.concat([q.answer]));else q.type="write";
+    var key=function(a){return f?a.replace(/\s+/g,""):norm(a);};
+    var seen={};seen[key(q.answer)]=1;var ds=[];
+    shuffle(set.cards).forEach(function(c){var a=en?c.d:c.t,k=key(a);if(!seen[k]&&ds.length<3){seen[k]=1;ds.push(a);}});
+    if(ds.length)q.options=shuffle(ds.concat([q.answer]));else if(f)q.options=[q.answer];else q.type="write";
   }
   session.q=q;ui.screen="learn";render();
-  if(en&&state.opts.sound)speak(card.t);
+  if(!f&&en&&state.opts.sound)speak(card.t);
 }
 function answer(ok,given){
   var q=session.q;if(q.st!=="ask")return;
@@ -363,8 +403,8 @@ function answer(ok,given){
     session.queue.splice(Math.min(session.queue.length,2),0,q.card.id);
   }
   save();render();
-  if(state.opts.dir==="ru-en"&&state.opts.sound)speak(q.card.t);
-  if(ok)session.t=setTimeout(askNext,state.opts.dir==="ru-en"&&state.opts.sound?1400:850);
+  if(!q.f&&!q.en&&state.opts.sound)speak(q.card.t);
+  if(ok)session.t=setTimeout(askNext,!q.f&&!q.en&&state.opts.sound?1400:850);
 }
 function override(){
   var q=session.q;if(q.st!=="wrong")return;
@@ -374,17 +414,18 @@ function override(){
 }
 var SPK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
 function learnHTML(){
-  var q=session.q,set=getSet(session.setId),c=counts(set),en=state.opts.dir==="en-ru";
-  var showSay=en||q.st!=="ask";
+  var q=session.q,set=getSet(session.setId),c=counts(set),en=q.en,f=q.f;
+  var showSay=!f&&(en||q.st!=="ask");
+  var shP=function(x){return f?rich(x,!en):esc(x);},shO=function(x){return f?rich(x,en):esc(x);};
   var h='<div class="top"><button class="x" data-act="quit" aria-label="Закрыть">×</button><div class="bar" role="img" aria-label="Раунд: '+session.ok+' из '+session.total+'"><i class="b2" style="width:'+(session.ok/session.total*100)+'%"></i></div></div>'+
     '<p class="count">Раунд '+session.round+'. Выучено '+c[2]+' из '+set.cards.length+'</p>'+
-    '<div class="prompt pop"><span class="hint">'+(q.type==="choice"?"Выберите перевод":(en?"Напишите перевод":"Напишите по-английски"))+'</span><span class="word">'+esc(q.prompt)+'</span>'+
+    '<div class="prompt pop"><span class="hint">'+(q.type==="choice"?(f?(en?"Выберите формулу":"Выберите название"):"Выберите перевод"):(en?"Напишите перевод":"Напишите по-английски"))+'</span><span class="word">'+shP(q.prompt)+'</span>'+
     (showSay?'<button class="say" data-act="say" aria-label="Произнести">'+SPK+'</button>':'')+'</div>';
   if(q.type==="choice"){
     h+='<div class="stack">'+q.options.map(function(o,i){
       var cls="";
       if(q.st!=="ask"){if(o===q.answer)cls=" right";else if(i===q.chosen)cls=" wrong";}
-      return '<button class="opt'+cls+'" data-act="pick" data-i="'+i+'"'+(q.st!=="ask"?" disabled":"")+'>'+esc(o)+'</button>';
+      return '<button class="opt'+cls+'" data-act="pick" data-i="'+i+'"'+(q.st!=="ask"?" disabled":"")+'>'+shO(o)+'</button>';
     }).join("")+'</div>';
     if(q.st==="wrong")h+='<div class="stack" style="margin-top:14px"><button class="btn" data-act="next">Дальше</button></div>';
   }else if(q.st==="ask"){
@@ -401,15 +442,15 @@ function learnHTML(){
 function roundHTML(){
   var set=getSet(session.setId),c=counts(set),left=c[0]+c[1];
   var missed=set.cards.filter(function(x){return session.missed.indexOf(x.id)!==-1;});
-  var h='<h2 style="margin-top:18px">Раунд '+session.round+' пройден</h2><p class="muted">'+(left?'Осталось выучить: '+wordsN(left)+'.':'Все слова набора выучены.')+'</p>'+
+  var h='<h2 style="margin-top:18px">Раунд '+session.round+' пройден</h2><p class="muted">'+(left?'Осталось выучить: '+cnt(set,left)+'.':'Весь набор выучен.')+'</p>'+
     '<div style="margin:10px 0 18px">'+barHTML(set)+'<div class="legend"><span class="l2">Выучены: '+c[2]+'</span><span class="l1">Знакомые: '+c[1]+'</span><span>Новые: '+c[0]+'</span></div></div>';
-  if(missed.length)h+='<div class="panel" style="margin-bottom:18px"><span class="field">Стоит повторить</span><ul class="words">'+missed.map(function(x){return '<li><i class="dot s'+(x.s||0)+'"></i><span class="t">'+esc(x.t)+'</span><span class="d">'+esc(x.d)+'</span></li>';}).join("")+'</ul></div>';
+  if(missed.length)h+='<div class="panel" style="margin-bottom:18px"><span class="field">Стоит повторить</span><ul class="words">'+missed.map(function(x){return li(set,x,true);}).join("")+'</ul></div>';
   h+='<div class="stack"><button class="btn" data-act="'+(left?'cont':'finish')+'">'+(left?'Следующий раунд':'Завершить')+'</button>'+(left?'<button class="btn ghost" data-act="quit">Закончить на сегодня</button>':'')+'</div>';
   return h;
 }
 function doneHTML(){
   var set=getSet(ui.setId);
-  return '<div class="big" aria-hidden="true">🎉</div><h2>Набор выучен</h2><p class="muted">'+esc(set.name)+': '+wordsN(set.cards.length)+' пройдено и выбором, и вводом по памяти.</p>'+
+  return '<div class="big" aria-hidden="true">🎉</div><h2>Набор выучен</h2><p class="muted">'+esc(set.name)+': '+(isF(set)?itemsN(set)+', каждая дважды выбрана верно.':wordsN(set.cards.length)+' пройдено и выбором, и вводом по памяти.')+'</p>'+
     '<div class="stack" style="margin-top:14px"><button class="btn" data-act="relearn">Учить заново</button><button class="btn ghost" data-act="toset">К набору</button></div>';
 }
 
@@ -420,12 +461,14 @@ app.addEventListener("click",function(e){
   if(a!=="reset"&&a!=="del")ui.confirm=null;
   switch(a){
     case "home":go("home");break;
-    case "new":ui.editId=null;go("edit");break;
+    case "new":ui.editId=null;ui.draft={name:"",text:"",kind:"words"};go("edit");break;
     case "sample":
       state.sets.push({id:uid(),name:"Пример: полезные слова",cards:SAMPLE.map(function(x){return{id:uid(),t:x[0],d:x[1],s:0};})});
       save();render();break;
     case "open":ui.setId=b.dataset.id;go("set");break;
-    case "edit":ui.editId=ui.setId;go("edit");break;
+    case "edit":ui.editId=ui.setId;ui.draft={name:set.name,kind:set.kind||"words",text:set.cards.map(function(x){return x.t+" - "+x.d;}).join("\n")};go("edit");break;
+    case "kind":grabDraft();ui.draft.kind=b.dataset.v;render();break;
+    case "fsample":grabDraft();ui.draft.text=(ui.draft.text.trim()?ui.draft.text.replace(/\s+$/,"")+"\n":"")+F_SAMPLE;if(!ui.draft.name.trim())ui.draft.name="Пример: геометрия и тригонометрия";render();break;
     case "cancel":go(ui.editId?"set":"home");break;
     case "save":saveSet();break;
     case "opt":
@@ -464,16 +507,17 @@ function check(){
   answer(isRight(v,session.q.answer),v);
 }
 function saveSet(){
-  var name=document.getElementById("nm").value.trim(),pairs=parse(document.getElementById("tx").value);
+  grabDraft();var name=ui.draft.name.trim(),kind=ui.draft.kind,pairs=parse(ui.draft.text,kind);
   if(!pairs.length)return;
   if(!name)name="Набор "+(state.sets.length+(ui.editId?0:1));
   var old=ui.editId?getSet(ui.editId):null,prev={};
   if(old)old.cards.forEach(function(c){prev[c.t+"|"+c.d]=c;});
   var cards=pairs.map(function(p){var o=prev[p.t+"|"+p.d];return{id:o?o.id:uid(),t:p.t,d:p.d,s:o?(o.s||0):0};});
-  if(old){old.name=name;old.cards=cards;}
-  else{var s={id:uid(),name:name,cards:cards};state.sets.push(s);ui.setId=s.id;}
+  if(old){old.name=name;old.kind=kind;old.cards=cards;}
+  else{var s={id:uid(),name:name,kind:kind,cards:cards};state.sets.push(s);ui.setId=s.id;}
   save();go("set");
 }
+window.__kx=function(){if(ui.screen==="edit")updateParsed();else render();};
 readHash();
 render();
 window.addEventListener("hashchange",function(){if(!session&&readHash()){render();window.scrollTo(0,0);}});
