@@ -109,6 +109,10 @@ math{font-family:"STIX Two Math","Cambria Math","Latin Modern Math","Noto Sans M
 .words li.fl .t{flex:1 1 calc(100% - 24px)}
 .words li.fl .d{flex:1 1 100%;color:var(--ink)}
 .pv{margin-top:12px}
+.review{background:var(--surface);border-radius:20px;padding:18px;margin:4px 0 18px;border:1.5px solid var(--accent-soft)}
+.review b{display:block;font-size:19px;font-weight:600}
+.review .small{display:block;margin:2px 0 14px}
+.from{font-size:14.5px;color:var(--muted);margin:0 0 14px 58px;overflow-wrap:anywhere}
 textarea.mini{min-height:110px;font-size:15px}
 .big{font-size:64px;line-height:1;margin:24px 0 10px}
 .pop{animation:pop .22s ease-out}
@@ -191,6 +195,7 @@ function counts(set){var c=[0,0,0];set.cards.forEach(function(x){c[x.s||0]++;});
 function plural(n,a,b,c){var m=n%100,k=n%10;if(m>10&&m<20)return c;if(k===1)return a;if(k>1&&k<5)return b;return c;}
 function wordsN(n){return n+" "+plural(n,"слово","слова","слов");}
 function cnt(set,n){return isF(set)?n+" "+plural(n,"формула","формулы","формул"):wordsN(n);}
+function cardsN(n){return n+" "+plural(n,"карточка","карточки","карточек");}
 function itemsN(set){return cnt(set,set.cards.length);}
 function barHTML(set){
   var c=counts(set),n=set.cards.length||1;
@@ -238,6 +243,7 @@ function render(){
   else if(ui.screen==="round")h=roundHTML();
   else if(ui.screen==="done")h=doneHTML();
   else if(ui.screen==="import")h=importHTML();
+  else if(ui.screen==="rdone")h=reviewDoneHTML();
   app.innerHTML=h;
   if(ui.screen==="edit")updateParsed();
   if(ui.screen==="learn"&&session.q.type==="write"&&session.q.st==="ask"){var i=document.getElementById("ans");if(i)i.focus();}
@@ -251,7 +257,7 @@ function homeHTML(){
       '<div class="stack" style="margin-top:14px"><button class="btn" data-act="new">Создать набор</button>'+
       '<button class="btn ghost" data-act="sample">Добавить набор для примера</button></div>';
   }
-  h+='<p class="muted">Выберите набор, чтобы учить.</p><div class="stack" style="margin:8px 0 18px">';
+  h+=reviewHTML()+'<p class="muted">Выберите набор, чтобы учить.</p><div class="stack" style="margin:8px 0 18px">';
   state.sets.forEach(function(s){
     var c=counts(s);
     h+='<button class="setcard" data-act="open" data-id="'+s.id+'"><b>'+esc(s.name)+'</b><span class="small muted">'+itemsN(s)+', выучено '+c[2]+'</span>'+barHTML(s)+'</button>';
@@ -366,59 +372,107 @@ function updateParsed(){
 }
 
 /* ---------- заучивание ---------- */
+/* ---------- интервальное повторение ---------- */
+var DAY=864e5,INT=[1,3,7,14,30,60,120],REV_N=10;
+function learned(){var a=[];state.sets.forEach(function(st){st.cards.forEach(function(c){if(c.s===2)a.push({set:st,card:c});});});return a;}
+function isDue(c,now){return !c.due||c.due<=now;}
+function dueList(){var now=Date.now();return learned().filter(function(x){return isDue(x.card,now);});}
+function markLearned(c){if(c.s===2&&!c.due){c.lv=0;c.due=Date.now()+DAY;}}
+function whenText(t){
+  var d=Math.ceil((t-Date.now())/DAY);
+  if(d<=1)return "завтра";if(d===2)return "послезавтра";
+  return "через "+d+" "+plural(d,"день","дня","дней");
+}
+function reviewHTML(){
+  var all=learned();if(!all.length)return "";
+  var due=dueList().length;
+  if(due)return '<div class="review"><b>Повторение</b><span class="small muted">Пора повторить: '+cardsN(due)+'. За раз берётся до '+REV_N+' из разных наборов.</span><button class="btn" data-act="review">Повторить '+Math.min(due,REV_N)+'</button></div>';
+  var next=Math.min.apply(null,all.map(function(x){return x.card.due||0;}));
+  return '<div class="review"><b>Повторение</b><span class="small muted">На сегодня всё повторено. Следующее повторение '+whenText(next)+'.</span><button class="btn ghost" data-act="extra">Повторить случайные</button></div>';
+}
+function startReview(extra){
+  var pool=extra?shuffle(learned()):dueList().sort(function(a,b){return (a.card.due||0)-(b.card.due||0)||(a.card.lv||0)-(b.card.lv||0);});
+  var pick=shuffle(pool.slice(0,REV_N));
+  if(!pick.length){go("home");return;}
+  session={review:true,extra:!!extra,round:1,t:null,first:{},firstOk:0,
+    queue:pick.map(function(x){return x.set.id+"|"+x.card.id;}),total:pick.length,ok:0,missed:[]};
+  askNext();
+}
+function reviewDoneHTML(){
+  var left=dueList().length,miss=[];
+  session.missed.forEach(function(k){var p=k.split("|"),st=getSet(p[0]),c=st&&st.cards.find(function(x){return x.id===p[1];});if(c)miss.push({set:st,card:c});});
+  var h='<h2 style="margin-top:18px">Повторение завершено</h2><p class="muted">С первого раза верно: '+session.firstOk+' из '+session.total+'.'+(left?' Ещё ждут повторения: '+cardsN(left)+'.':'')+'</p>';
+  if(miss.length)h+='<div class="panel" style="margin:10px 0 18px"><span class="field">Вернутся завтра</span><ul class="words">'+miss.map(function(x){return li(x.set,x.card,false);}).join("")+'</ul></div>';
+  return h+'<div class="stack" style="margin-top:8px">'+(left?'<button class="btn" data-act="review">Повторить ещё '+Math.min(left,REV_N)+'</button>':'')+'<button class="btn'+(left?' ghost':'')+'" data-act="home">На главную</button></div>';
+}
+
 function startLearn(){session={setId:ui.setId,round:0,t:null};nextRound();}
 function nextRound(){
   var set=getSet(session.setId);
   var pend=set.cards.filter(function(c){return (c.s||0)<2;});
   if(!pend.length){go("done");return;}
   var pick=shuffle(pend.filter(function(c){return c.s===1;})).concat(shuffle(pend.filter(function(c){return !c.s;}))).slice(0,7);
-  session.queue=shuffle(pick).map(function(c){return c.id;});
+  session.queue=shuffle(pick).map(function(c){return session.setId+"|"+c.id;});
   session.total=pick.length;session.ok=0;session.missed=[];session.round++;
   ui.screen="learn";askNext();
 }
 function askNext(){
   clearTimeout(session.t);
-  if(!session.queue.length){go("round");return;}
-  var set=getSet(session.setId),id=session.queue.shift();
-  var card=set.cards.find(function(c){return c.id===id;});
-  if(!card){askNext();return;}
+  if(!session.queue.length){go(session.review?"rdone":"round");return;}
+  var key=session.queue.shift(),kp=key.split("|"),set=getSet(kp[0]);
+  var card=set&&set.cards.find(function(c){return c.id===kp[1];});
+  if(!card){if(session.review)session.total--;askNext();return;}
   var f=isF(set),en=(f?(state.opts.fdir||"en-ru"):state.opts.dir)==="en-ru";
-  var q={card:card,f:f,en:en,prompt:en?card.t:card.d,answer:en?card.d:card.t,st:"ask",given:"",chosen:null};
-  q.type=f?"choice":(state.opts.types==="both"?(card.s?"write":"choice"):state.opts.types);
+  var q={key:key,set:set,card:card,f:f,en:en,prompt:en?card.t:card.d,answer:en?card.d:card.t,st:"ask",given:"",chosen:null};
+  q.type=f?"choice":(state.opts.types==="both"?(card.s||session.review?"write":"choice"):state.opts.types);
   if(q.type==="choice"){
     var key=function(a){return f?a.replace(/\s+/g,""):norm(a);};
     var seen={};seen[key(q.answer)]=1;var ds=[];
     shuffle(set.cards).forEach(function(c){var a=en?c.d:c.t,k=key(a);if(!seen[k]&&ds.length<3){seen[k]=1;ds.push(a);}});
     if(ds.length)q.options=shuffle(ds.concat([q.answer]));else if(f)q.options=[q.answer];else q.type="write";
   }
+  q.plv=card.lv;q.pdue=card.due;
   session.q=q;ui.screen="learn";render();
   if(!f&&en&&state.opts.sound)speak(card.t);
 }
 function answer(ok,given){
   var q=session.q;if(q.st!=="ask")return;
   q.given=given;q.st=ok?"right":"wrong";
-  if(ok){q.card.s=Math.min(2,(q.card.s||0)+1);session.ok++;}
+  if(session.review)grade(q,ok);
+  else if(ok){q.card.s=Math.min(2,(q.card.s||0)+1);markLearned(q.card);}
+  if(ok)session.ok++;
   else{
-    if(session.missed.indexOf(q.card.id)===-1)session.missed.push(q.card.id);
-    session.queue.splice(Math.min(session.queue.length,2),0,q.card.id);
+    if(session.missed.indexOf(q.key)===-1)session.missed.push(q.key);
+    session.queue.splice(Math.min(session.queue.length,2),0,q.key);
   }
   save();render();
   if(!q.f&&!q.en&&state.opts.sound)speak(q.card.t);
   if(ok)session.t=setTimeout(askNext,!q.f&&!q.en&&state.opts.sound?1400:850);
 }
+function grade(q,ok){
+  var c=q.card,now=Date.now();
+  if(session.first[q.key])return;
+  session.first[q.key]=1;
+  if(ok){
+    session.firstOk++;
+    if(isDue(c,now)){c.lv=Math.min(INT.length-1,(c.due?(c.lv||0)+1:0));c.due=now+INT[c.lv]*DAY;}
+  }else{c.lv=0;c.due=now+DAY;}
+}
 function override(){
   var q=session.q;if(q.st!=="wrong")return;
-  var i=session.queue.indexOf(q.card.id);if(i!==-1)session.queue.splice(i,1);
-  var m=session.missed.indexOf(q.card.id);if(m!==-1)session.missed.splice(m,1);
-  q.card.s=Math.min(2,(q.card.s||0)+1);session.ok++;save();askNext();
+  var i=session.queue.indexOf(q.key);if(i!==-1)session.queue.splice(i,1);
+  var m=session.missed.indexOf(q.key);if(m!==-1)session.missed.splice(m,1);
+  if(session.review){delete session.first[q.key];q.card.lv=q.plv;q.card.due=q.pdue;grade(q,true);}
+  else{q.card.s=Math.min(2,(q.card.s||0)+1);markLearned(q.card);}
+  session.ok++;save();askNext();
 }
 var SPK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
 function learnHTML(){
-  var q=session.q,set=getSet(session.setId),c=counts(set),en=q.en,f=q.f;
+  var q=session.q,set=q.set,c=counts(set),en=q.en,f=q.f;
   var showSay=!f&&(en||q.st!=="ask");
   var shP=function(x){return f?rich(x,!en):esc(x);},shO=function(x){return f?rich(x,en):esc(x);};
   var h='<div class="top"><button class="x" data-act="quit" aria-label="Закрыть">×</button><div class="bar" role="img" aria-label="Раунд: '+session.ok+' из '+session.total+'"><i class="b2" style="width:'+(session.ok/session.total*100)+'%"></i></div></div>'+
-    '<p class="count">Раунд '+session.round+'. Выучено '+c[2]+' из '+set.cards.length+'</p>'+
+    (session.review?'<p class="from">Повторение'+(session.extra?' вне графика':'')+'. '+esc(set.name)+'</p>':'<p class="count">Раунд '+session.round+'. Выучено '+c[2]+' из '+set.cards.length+'</p>')+
     '<div class="prompt pop"><span class="hint">'+(q.type==="choice"?(f?(en?"Выберите формулу":"Выберите название"):"Выберите перевод"):(en?"Напишите перевод":"Напишите по-английски"))+'</span><span class="word">'+shP(q.prompt)+'</span>'+
     (showSay?'<button class="say" data-act="say" aria-label="Произнести">'+SPK+'</button>':'')+'</div>';
   if(q.type==="choice"){
@@ -441,7 +495,7 @@ function learnHTML(){
 }
 function roundHTML(){
   var set=getSet(session.setId),c=counts(set),left=c[0]+c[1];
-  var missed=set.cards.filter(function(x){return session.missed.indexOf(x.id)!==-1;});
+  var missed=set.cards.filter(function(x){return session.missed.indexOf(set.id+"|"+x.id)!==-1;});
   var h='<h2 style="margin-top:18px">Раунд '+session.round+' пройден</h2><p class="muted">'+(left?'Осталось выучить: '+cnt(set,left)+'.':'Весь набор выучен.')+'</p>'+
     '<div style="margin:10px 0 18px">'+barHTML(set)+'<div class="legend"><span class="l2">Выучены: '+c[2]+'</span><span class="l1">Знакомые: '+c[1]+'</span><span>Новые: '+c[0]+'</span></div></div>';
   if(missed.length)h+='<div class="panel" style="margin-bottom:18px"><span class="field">Стоит повторить</span><ul class="words">'+missed.map(function(x){return li(set,x,true);}).join("")+'</ul></div>';
@@ -460,7 +514,7 @@ app.addEventListener("click",function(e){
   var a=b.dataset.act,set=getSet(ui.setId);
   if(a!=="reset"&&a!=="del")ui.confirm=null;
   switch(a){
-    case "home":go("home");break;
+    case "home":if(session&&session.review)session=null;go("home");break;
     case "new":ui.editId=null;ui.draft={name:"",text:"",kind:"words"};go("edit");break;
     case "sample":
       state.sets.push({id:uid(),name:"Пример: полезные слова",cards:SAMPLE.map(function(x){return{id:uid(),t:x[0],d:x[1],s:0};})});
@@ -475,12 +529,14 @@ app.addEventListener("click",function(e){
       var k=b.dataset.k,v=b.dataset.v;state.opts[k]=k==="sound"?v==="1":v;save();render();break;
     case "reset":
       if(ui.confirm!=="reset"){ui.confirm="reset";render();break;}
-      set.cards.forEach(function(c){c.s=0;});ui.confirm=null;save();render();break;
+      set.cards.forEach(function(c){c.s=0;delete c.lv;delete c.due;});ui.confirm=null;save();render();break;
     case "del":
       if(ui.confirm!=="del"){ui.confirm="del";render();break;}
       state.sets=state.sets.filter(function(s){return s.id!==ui.setId;});save();go("home");break;
     case "learn":startLearn();break;
-    case "relearn":set.cards.forEach(function(c){c.s=0;});save();startLearn();break;
+    case "review":startReview(false);break;
+    case "extra":startReview(true);break;
+    case "relearn":set.cards.forEach(function(c){c.s=0;delete c.lv;delete c.due;});save();startLearn();break;
     case "pick":var i=+b.dataset.i;session.q.chosen=i;answer(session.q.options[i]===session.q.answer,"");break;
     case "check":check();break;
     case "skip":answer(false,"");break;
@@ -489,7 +545,7 @@ app.addEventListener("click",function(e){
     case "say":speak(session.q.card.t);break;
     case "cont":nextRound();break;
     case "finish":session=null;go("done");break;
-    case "quit":clearTimeout(session.t);session=null;go("set");break;
+    case "quit":clearTimeout(session.t);var wasRev=session.review;session=null;go(wasRev?"home":"set");break;
     case "toset":go("set");break;
     case "share":ui.share=!ui.share;render();break;
     case "copy":copyShare(b);break;
@@ -512,7 +568,7 @@ function saveSet(){
   if(!name)name="Набор "+(state.sets.length+(ui.editId?0:1));
   var old=ui.editId?getSet(ui.editId):null,prev={};
   if(old)old.cards.forEach(function(c){prev[c.t+"|"+c.d]=c;});
-  var cards=pairs.map(function(p){var o=prev[p.t+"|"+p.d];return{id:o?o.id:uid(),t:p.t,d:p.d,s:o?(o.s||0):0};});
+  var cards=pairs.map(function(p){var o=prev[p.t+"|"+p.d];var n={id:o?o.id:uid(),t:p.t,d:p.d,s:o?(o.s||0):0};if(o&&o.due){n.lv=o.lv||0;n.due=o.due;}return n;});
   if(old){old.name=name;old.kind=kind;old.cards=cards;}
   else{var s={id:uid(),name:name,kind:kind,cards:cards};state.sets.push(s);ui.setId=s.id;}
   save();go("set");
