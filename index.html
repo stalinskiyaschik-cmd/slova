@@ -386,13 +386,23 @@ function whenText(t){
 function reviewHTML(){
   var all=learned();if(!all.length)return "";
   var due=dueList().length;
-  if(due)return '<div class="review"><b>Повторение</b><span class="small muted">Пора повторить: '+cardsN(due)+'. За раз берётся до '+REV_N+' из разных наборов.</span><button class="btn" data-act="review">Повторить '+Math.min(due,REV_N)+'</button></div>';
+  if(due)return '<div class="review"><b>Повторение</b><span class="small muted">Пора повторить: '+cardsN(due)+'. За раз до '+REV_N+', поровну из разных наборов.</span><button class="btn" data-act="review">Повторить '+Math.min(due,REV_N)+'</button></div>';
   var next=Math.min.apply(null,all.map(function(x){return x.card.due||0;}));
   return '<div class="review"><b>Повторение</b><span class="small muted">На сегодня всё повторено. Следующее повторение '+whenText(next)+'.</span><button class="btn ghost" data-act="extra">Повторить случайные</button></div>';
 }
 function startReview(extra){
   var pool=extra?shuffle(learned()):dueList().sort(function(a,b){return (a.card.due||0)-(b.card.due||0)||(a.card.lv||0)-(b.card.lv||0);});
-  var pick=shuffle(pool.slice(0,REV_N));
+  /* поровну из разных наборов: по одному слову из каждого набора по кругу */
+  var groups={},order=[];
+  pool.forEach(function(x){if(!groups[x.set.id]){groups[x.set.id]=[];order.push(x.set.id);}groups[x.set.id].push(x);});
+  order=shuffle(order);
+  var pick=[];
+  while(pick.length<REV_N){
+    var added=false;
+    order.forEach(function(id){if(pick.length<REV_N&&groups[id].length){pick.push(groups[id].shift());added=true;}});
+    if(!added)break;
+  }
+  pick=shuffle(pick);
   if(!pick.length){go("home");return;}
   session={review:true,extra:!!extra,round:1,t:null,first:{},firstOk:0,
     queue:pick.map(function(x){return x.set.id+"|"+x.card.id;}),total:pick.length,ok:0,missed:[]};
