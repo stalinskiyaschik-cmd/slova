@@ -288,26 +288,55 @@ function setHTML(){
 }
 
 /* ---------- обмен наборами ---------- */
-function enc(set){
+/* Ссылка на набор.
+   #z= — новый короткий формат: текст набора, кириллица упакована в 1 байт, сжатие deflate.
+   #s= — старый формат без сжатия, ссылки в нём продолжают открываться. */
+function toText(set){
   var clean=function(x){return String(x).replace(/[\t\r\n]+/g," ");};
-  var txt=clean(set.name)+(isF(set)?"\tf":"")+"\n"+set.cards.map(function(c){return clean(c.t)+"\t"+clean(c.d);}).join("\n");
-  var by=new TextEncoder().encode(txt),bin="";
-  for(var i=0;i<by.length;i++)bin+=String.fromCharCode(by[i]);
-  return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+  return clean(set.name)+(isF(set)?"\tf":"")+"\n"+set.cards.map(function(c){return clean(c.t)+"\t"+clean(c.d);}).join("\n");
 }
-function dec(code){
-  try{
-    var b=code.replace(/-/g,"+").replace(/_/g,"/");while(b.length%4)b+="=";
-    var bin=atob(b),by=new Uint8Array(bin.length);
-    for(var i=0;i<bin.length;i++)by[i]=bin.charCodeAt(i);
-    var lines=new TextDecoder().decode(by).split("\n");
-    var head=(lines.shift()||"").split("\t"),name=head[0].trim().slice(0,60)||"Набор",kind=head[1]==="f"?"formulas":"words";
-    var cards=[];
-    lines.slice(0,2000).forEach(function(l){var p=l.split("\t");if(p.length>=2&&p[0].trim()&&p[1].trim())cards.push({t:p[0].trim(),d:p[1].trim()});});
-    return cards.length?{name:name,kind:kind,cards:cards}:null;
-  }catch(e){return null;}
+function fromText(txt){
+  var lines=txt.split("\n");
+  var head=(lines.shift()||"").split("\t"),name=head[0].trim().slice(0,60)||"Набор",kind=head[1]==="f"?"formulas":"words";
+  var cards=[];
+  lines.slice(0,2000).forEach(function(l){var p=l.split("\t");if(p.length>=2&&p[0].trim()&&p[1].trim())cards.push({t:p[0].trim(),d:p[1].trim()});});
+  return cards.length?{name:name,kind:kind,cards:cards}:null;
+}
+function b64(by){var bin="";for(var i=0;i<by.length;i++)bin+=String.fromCharCode(by[i]);return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");}
+function unb64(code){var b=code.replace(/-/g,"+").replace(/_/g,"/");while(b.length%4)b+="=";var bin=atob(b),by=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)by[i]=bin.charCodeAt(i);return by;}
+function enc(set){return b64(new TextEncoder().encode(toText(set)));}
+function dec(code){try{return fromText(new TextDecoder().decode(unb64(code)));}catch(e){return null;}}
+/* кириллица А..я -> 128..191, ё -> 192, Ё -> 193; если есть другие символы, обычный UTF-8 */
+function packText(txt){
+  var out=[1];
+  for(var i=0;i<txt.length;i++){
+    var k=txt.charCodeAt(i);
+    if(k<128)out.push(k);else if(k>=0x410&&k<=0x44F)out.push(k-0x410+128);else if(k===0x451)out.push(192);else if(k===0x401)out.push(193);
+    else{var u=new TextEncoder().encode(txt),r=new Uint8Array(u.length+1);r[0]=0;r.set(u,1);return r;}
+  }
+  return new Uint8Array(out);
+}
+function unpackText(by){
+  if(by[0]===0)return new TextDecoder().decode(by.subarray(1));
+  var s="";for(var i=1;i<by.length;i++){var k=by[i];s+=String.fromCharCode(k<128?k:k<192?k-128+0x410:k===192?0x451:0x401);}
+  return s;
+}
+function zipOk(){return typeof CompressionStream==="function"&&typeof DecompressionStream==="function";}
+async function pipe(by,stream){return new Uint8Array(await new Response(new Blob([by]).stream().pipeThrough(stream)).arrayBuffer());}
+async function encZ(set){return b64(await pipe(packText(toText(set)),new CompressionStream("deflate-raw")));}
+async function decZ(code){try{return fromText(unpackText(await pipe(unb64(code),new DecompressionStream("deflate-raw"))));}catch(e){return null;}}
+async function shareUrl(set){
+  var base=location.origin+location.pathname+location.search;
+  if(zipOk()){try{return base+"#z="+(await encZ(set));}catch(e){}}
+  return base+"#s="+enc(set);
 }
 function readHash(){
+  var z=location.hash.match(/^#z=([A-Za-z0-9_-]+)/);
+  if(z){
+    if(!zipOk())return false;
+    decZ(z[1]).then(function(inc){if(inc&&!session){ui.incoming=inc;ui.screen="import";render();window.scrollTo(0,0);}});
+    return false;
+  }
   var m=location.hash.match(/^#s=([A-Za-z0-9_-]+)/);if(!m)return false;
   var inc=dec(m[1]);if(!inc)return false;
   ui.incoming=inc;ui.screen="import";return true;
@@ -319,8 +348,8 @@ function shareHTML(s){
     return '<div class="panel stack"><label class="field" for="sh" style="margin:0">Слова набора</label><textarea id="sh" class="mini" readonly>'+esc(s.cards.map(function(x){return x.t+" - "+x.d;}).join("\n"))+'</textarea>'+
       '<button class="btn" data-act="copy">Скопировать слова</button><p class="small muted" style="margin:0">Ссылки на наборы работают в версии на отдельном сайте. Здесь можно скопировать слова: получатель вставит их в новый набор.</p></div>';
   }
-  var url=location.origin+location.pathname+location.search+"#s="+enc(s);
-  return '<div class="panel stack"><label class="field" for="sh" style="margin:0">Ссылка на набор</label><input id="sh" type="text" readonly value="'+esc(url)+'">'+
+  if(!ui.shareUrl)return '<div class="panel"><p class="small muted" style="margin:0">Готовлю ссылку…</p></div>';
+  return '<div class="panel stack"><label class="field" for="sh" style="margin:0">Ссылка на набор</label><input id="sh" type="text" readonly value="'+esc(ui.shareUrl)+'">'+
     '<button class="btn" data-act="copy">Скопировать ссылку</button><p class="small muted" style="margin:0">Тот, кто откроет ссылку, сможет добавить набор себе. Прогресс не передаётся.</p></div>';
 }
 function importHTML(){
@@ -557,7 +586,10 @@ app.addEventListener("click",function(e){
     case "finish":session=null;go("done");break;
     case "quit":clearTimeout(session.t);var wasRev=session.review;session=null;go(wasRev?"home":"set");break;
     case "toset":go("set");break;
-    case "share":ui.share=!ui.share;render();break;
+    case "share":
+      ui.share=!ui.share;ui.shareUrl=null;render();
+      if(ui.share&&!framed){var sid=set.id;shareUrl(set).then(function(u){if(ui.share&&ui.setId===sid){ui.shareUrl=u;render();}});}
+      break;
     case "copy":copyShare(b);break;
     case "imp-add":addIncoming();break;
     case "imp-no":ui.incoming=null;clearHash();go("home");break;
